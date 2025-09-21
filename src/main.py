@@ -6,6 +6,7 @@ This organizer separetes files for type/extensions in subfolders
 """
 
 import argparse
+
 from organizer import DownloadsOrganizer
 
 
