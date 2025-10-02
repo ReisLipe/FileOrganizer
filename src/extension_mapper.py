@@ -1,3 +1,5 @@
+# MARK: - Edit this file if you want to change the organization
+
 EXTENSION_MAPPING = {
     "Ducuments": [
         ".pdf",
