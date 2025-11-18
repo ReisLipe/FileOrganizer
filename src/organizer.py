@@ -1,156 +1,147 @@
 import shutil
 
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import List, Optional, Tuple
+from rich import print as rprint
 
-from extension_mapper import EXTENSION_MAPPING
+from extension_mapper import EXTENSION_TO_CATEGORY
 
 
-class DownloadsOrganizer:
-    def __init__(self, downloads_path=None, dry_run=False):
-        if downloads_path:
-            self.downloads_path = Path(downloads_path)
-        else:
-            self.downloads_path = Path.home() / "Downloads"
+@dataclass
+class MoveRecord:
+    source: Path
+    destination: Path
+    category: str
 
-        self.dry_run = dry_run
-        self.moved_files = []
-        self.errors = []
+
+@dataclass
+class ErrorRecord:
+    file: Path
+    error: str
+
+
+class FolderOrganizer:
+    def __init__(self, downloads_path: Optional[Path] = None, dry_run: bool = False) -> None:
+        """
+        Organizes files in a folder (Downloads as the standard) by extension.
+        """
+
+        self.downloads_path: Path = (downloads_path if downloads_path is not None else Path.home() / "Downloads")
+        self.dry_run: bool = dry_run
+        self.moved_files: List[MoveRecord] = []
+        self.errors: List[ErrorRecord] = []
 
         if not self.downloads_path.exists():
-            raise ValueError(f"Folder {self.downloads_path} do not exists!")
+            raise ValueError(f"Folder {self.downloads_path} does not exist!")
 
-    def get_category_extension(self, extension):
-        extension_lower = extension.lower()
-        for (
-            category,
-            extensions,
-        ) in EXTENSION_MAPPING.items():  # .items() retorna pares (chave, valor)
-            if (
-                extension_lower in extensions
-            ):  # 'extensions' no plural para não sobrescrever o parâmetro
-                return category
-        return "Outros"
+    @staticmethod
+    def get_category(extension: str) -> str:
+        """
+        Return the category name for a given file extension
+        """
+        return EXTENSION_TO_CATEGORY.get(extension.lower(), "Others")
 
-    def should_skip_file(self, file_path):
-        is_app = file_path.suffix.lower() in [".app", ".pkg"]
+    def should_skip_file(self, file_path: Path) -> bool:
+        """
+        Decide whether a file should be skipped.
+
+        We skip:
+        - Hidden files
+        - System metadata files
+        - Directories (except .app/.pkg bundles, which are treated as 'apps')
+        """
+
+        is_app_bundle = file_path.suffix.lower() in {".app", ".pkg"}
+        if is_app_bundle:
+            return False  # macOS app bundles are directories with a .app suffix — we want to process them
+
         hidden_file = file_path.name.startswith(".")
-        system_file = file_path.name in [".DS_Store", "desktop.ini", "Thumbs.db"]
-        directory = file_path.is_dir()
+        system_file = file_path.name in {".DS_Store", "desktop.ini", "Thumbs.db"}
+        is_directory = file_path.is_dir()
 
-        if is_app:
-            return False
-
-        if directory or system_file or hidden_file:
+        if hidden_file or system_file or is_directory:
             return True
 
-    def create_category_folder(self, category):  # ← Mudar nome para 'folder'
-        category_path = self.downloads_path / category
-        if not self.dry_run:
-            category_path.mkdir(exist_ok=True)
-        return category_path
+        return False
 
-    def move_file(self, source, destination):
+    def create_category_folder(self, folder: str) -> Path:
+        """
+        Ensure the category folder exists and return its Path.
+        """
+        folder_path = self.downloads_path / folder
+        if not self.dry_run:
+            folder_path.mkdir(exist_ok=True)
+        return folder_path
+
+    def move_file(self, source: Path, destination: Path) -> Path:
+        """
+        Move the file to the given destination.
+        If a file with the same name exists, append a timestamp.
+        """
+
         if destination.exists():
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            name_parts = destination.stem, timestamp, destination.suffix
-            new_name = f"{name_parts[0]}_{name_parts[1]}{name_parts[2]}"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            new_name = f"{destination.stem}_{timestamp}{destination.suffix}"
             destination = destination.parent / new_name
 
         if not self.dry_run:
+            # shutil.move wants strings on some platforms
             shutil.move(str(source), str(destination))
 
         return destination
 
-    def organize(self):
-        print(
-            f"{'SIMULATING MODE' if self.dry_run else 'ORGANIZING'} downloads folder..."
-        )
-        print(f"Folder: {self.downloads_path}\n")
+    def organize(self) -> Tuple[List[MoveRecord], List[ErrorRecord]]:
+        """
+        Organize files in the downloads_path, returning lists of
+        successful moves and errors.
+        """
 
-        files = list(self.downloads_path.iterdir())
-        for file_path in files:
+        mode = ("[yellow]SIMULATING[/yellow]" if self.dry_run else "[green]ORGANIZING[/green]")
+        rprint(f"{mode} folder...")
+        rprint(f"Folder: [bold]{self.downloads_path}[/bold]\n")
+
+        for file_path in self.downloads_path.iterdir():
             try:
-                # Verifica se deve pular este arquivo
                 if self.should_skip_file(file_path):
                     continue
 
-                # Obtém a extensão e categoria
                 extension = file_path.suffix
-                if not extension:  # Arquivo sem extensão
-                    category = "Sem Extensao"
-                else:
-                    category = self.get_category_extension(extension)
+                if not extension: category = "NoExtension"
+                else: category = self.get_category(extension)
 
-                # Cria a pasta da categoria
-                category_folder = self.create_category_folder(category)
-
-                # Define o destino
-                destination = category_folder / file_path.name
-
-                # Move o arquivo
+                folder = self.create_category_folder(category)
+                destination = folder / file_path.name
                 final_destination = self.move_file(file_path, destination)
 
-                # Registra o movimento
-                self.moved_files.append(
-                    {
-                        "origem": file_path,
-                        "destino": final_destination,
-                        "categoria": category,
-                    }
-                )
+                move_record = move_record = MoveRecord(source=file_path, destination=final_destination, category=category)
+                self.moved_files.append(move_record)
 
-                print(
-                    f"{'📄 Moveria' if self.dry_run else '✅ Movido'}: {file_path.name}"
-                )
-                print(f"   → 📁 {category}/{final_destination.name}")
+                verb = "📄 Would move" if self.dry_run else "✅ Moved"
+                rprint(f"{verb}: [cyan]{file_path.name}[/cyan] → 📁 [magenta]{category}[/magenta]/{final_destination.name}")
 
             except Exception as e:
-                self.errors.append({"arquivo": file_path, "erro": str(e)})
-                print(f"❌ Erro com {file_path.name}: {e}")
+                error_record = ErrorRecord(file=file_path, error=str(e))
+                self.errors.append(error_record)
+
+                rprint(f"❌ Error with [red]{file_path.name}[/red]: {e}")
 
         return self.moved_files, self.errors
 
     def generate_report(self):
         """
-        Gera um relatório da organização
-
-        Returns:
-            String com o relatório
+        Generate a string report of the organization.
         """
-        report = ["\n" + "=" * 50]
-        report.append("📊 RELATÓRIO DE ORGANIZAÇÃO")
-        report.append("=" * 50)
-
-        if self.dry_run:
-            report.append("⚠️  MODO SIMULAÇÃO - Nenhum arquivo foi movido")
-
-        # Estatísticas por categoria
-        categories = {}
-        for move in self.moved_files:
-            cat = move["categoria"]
-            categories[cat] = categories.get(cat, 0) + 1
-
-        report.append(f"\n📈 Total de arquivos processados: {len(self.moved_files)}")
-
-        if categories:
-            report.append("\n📁 Arquivos por categoria:")
-            for cat, count in sorted(categories.items()):
-                report.append(f"   • {cat}: {count} arquivo(s)")
-
-        if self.errors:
-            report.append(f"\n⚠️  Erros encontrados: {len(self.errors)}")
-            for error in self.errors:
-                report.append(f"   • {error['arquivo'].name}: {error['erro']}")
-
-        report.append("\n" + "=" * 50)
-
+        report: List[str] = ["\n" + "=" * 50]
+        report.append(f"📈 Total moved files: {len(self.moved_files)}")
+        report.append(f"📈 Total errors found: {len(self.errors)}")
         return "\n".join(report)
 
     def undo_last_organization(self, log_file="organization_log.json"):
         """
-        Desfaz a última organização baseado em um log
-        (Implementação futura)
+        (Future feature) Undo last organization based on a log file.
+        Maybe using self.move_files (?)
         """
-        # TODO: Implementar função de desfazer
+        # TODO: Implement this later
         pass

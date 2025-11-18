@@ -1,7 +1,7 @@
 # MARK: - Edit this file if you want to change the organization
 
 EXTENSION_MAPPING = {
-    "Ducuments": [
+    "Documents": [
         ".pdf",
         ".doc",
         ".docx",
@@ -60,4 +60,11 @@ EXTENSION_MAPPING = {
     "Design": [".psd", ".ai", ".sketch", ".fig", ".xd"],
     "Fonts": [".ttf", ".otf", ".woff", ".woff2"],
     "Ebooks": [".epub", ".mobi", ".azw", ".azw3"],
+}
+
+# Fast lookup: extension -> category (lowercased extensions)
+EXTENSION_TO_CATEGORY = {
+    ext.lower(): category
+    for category, extensions in EXTENSION_MAPPING.items()
+    for ext in extensions
 }
