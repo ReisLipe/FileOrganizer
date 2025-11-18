@@ -4,7 +4,8 @@ sorting files into subfolders based on their extension (documents, images,
 videos, archives, etc.). 
 
 I’m also using this project as a playground to learn **Docker** and **Python linting** with
-[Ruff](https://github.com/astral-sh/ruff).
+[Ruff](https://github.com/astral-sh/ruff). The Docker image can be found on
+[Docker Hub](https://hub.docker.com/repository/docker/lipereis/file_organizer/general)
 
 ---
 
@@ -20,9 +21,10 @@ I’m also using this project as a playground to learn **Docker** and **Python l
 - macOS (default behavior assumes a `~/Downloads` folder)
 - Python 3.9+ (tested with 3.9 and 3.11)
 
+---
+
 ## Run with Docker
 - Install Docker
-- If you want to build the image, run: `docker build -t <image_name>:<tag> <path>`
+- Pull the image from Docker Hub with: `docker pull lipereis/file_organizer:v1`
 - To execute the container, run: `docker run --rm -v $HOME/<path>:/data <image_name>:<tag>`
 
----
