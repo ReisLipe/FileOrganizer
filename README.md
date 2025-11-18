@@ -17,8 +17,12 @@ I’m also using this project as a playground to learn **Docker** and **Python l
 ---
 
 ## Requirements
-
 - macOS (default behavior assumes a `~/Downloads` folder)
 - Python 3.9+ (tested with 3.9 and 3.11)
+
+## Run with Docker
+- Install Docker
+- If you want to build the image, run: `docker build -t <image_name>:<tag> <path>`
+- To execute the container, run: `docker run --rm -v $HOME/<path>:/data <image_name>:<tag>`
 
 ---
